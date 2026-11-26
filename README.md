@@ -9,3 +9,6 @@ Render audio files for human and programmatic spectrum analysis.  This allows us
 
 ## App
 Provide the user experience of top-tier audiobook apps with the advantage of a ridiculously compressed text-based library (and Morse code practice.)
+
+## Validator
+Python scripts used by the agentic loop to validate the produced audio files.
