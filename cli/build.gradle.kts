@@ -4,6 +4,7 @@ plugins {
 }
 
 dependencies {
+    testImplementation(libs.kotlin.test.junit)
     implementation(project(":core"))
 }
 
