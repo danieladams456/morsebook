@@ -2,6 +2,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension
 
 plugins {
+    base
     alias(libs.plugins.kotlin.jvm) apply false
 }
 
@@ -24,4 +25,17 @@ subprojects {
             options.release.set(javaTarget.toInt())
         }
     }
+}
+
+val validatorTests = tasks.register<Exec>("validatorTests") {
+    commandLine("python3", "-m", "unittest", "discover", "-s", "validator/tests")
+}
+val audioAcceptance = tasks.register<Exec>("audioAcceptance") {
+    dependsOn(":cli:installDist")
+    commandLine("python3", "validator/acceptance.py",
+        project(":cli").layout.buildDirectory.file("install/morsebook/bin/morsebook").get().asFile,
+        layout.buildDirectory.dir("validator").get().asFile)
+}
+tasks.check {
+    dependsOn(":core:check", ":cli:check", validatorTests, audioAcceptance)
 }
