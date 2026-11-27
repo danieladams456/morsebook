@@ -5,7 +5,7 @@
 ### Screens
 1. Library: shows the books stored on device. MVP will have 2–3 statically bundled books. A Now Playing icon marks the book containing the last chapter played. Tapping a book opens its Book view.
 2. Book: always shows the full chapter list in book order. Unread chapters have no progress indicator, partially read chapters have a progress bar, and read chapters have a checkmark. A separate Now Playing icon marks the last chapter played. Both the book and chapter icons remain visible while paused. Opening the list leaves playback uninterrupted. Tapping a chapter opens Now Playing for that chapter.
-3. Now Playing: shows the selected chapter title, Play/Pause, Restart chapter, Next chapter, and controls for CW speed and tone frequency. Both settings apply app-wide. The new settings take effect on the next character or next word, whatever is simpler to implement. Tapping Play starts or resumes the selected chapter. Playback continues when the user navigates away, switches apps, or locks the device.
+3. Now Playing: shows the selected chapter title, Play/Pause, Restart chapter, Next chapter, and controls for CW speed and tone frequency. Both settings apply app-wide. Changing either setting during playback pauses audio, saves the start of the word being heard, rebuilds the buffer with the new settings, and automatically replays that word from the beginning. A brief delay is acceptable. Changing settings while paused leaves playback paused. Tapping Play starts or resumes the selected chapter. Playback continues when the user navigates away, switches apps, or locks the device.
 
 ### Playback Model
 1. Progress tracks the word the listener is hearing. The Book screen computes the progress fraction for display from that word’s starting offset and the chapter text length. Playback ignores unsupported characters. If paused mid-word, playback resumes from the beginning of that word.
@@ -20,7 +20,7 @@
 All MVP state stays on the device.  There is no server-side system.
 
 1. Save the user’s CW speed and tone frequency when either setting changes.
-2. Save each chapter’s reading status whenever it changes, including manual changes. For a partially read chapter, persist only the word’s starting offset as the bookmark on pause, chapter switch, or restart. During foreground and background playback, aim to save the current word at least once every 10 seconds of playback. After an unexpected stop, resume at the beginning of the most recently saved word.
+2. Save each chapter’s reading status whenever it changes, including manual changes. For a partially read chapter, persist only the word’s starting offset as the bookmark on every playback pause (including a settings change), chapter switch, or restart. During foreground and background playback, aim to save the current word at least once every 10 seconds of playback. After an unexpected stop, resume at the beginning of the most recently saved word.
 3. Record the book and chapter when audio begins playing, including during automatic continuation. For example, playing chapter 2 and then opening chapter 5 leaves chapter 2 as the last chapter played.
 4. On a cold start, restore playback settings, chapter statuses, and word positions. If a last played chapter exists, open Now Playing for that chapter and restore the icons for it and its book. Otherwise, open the Library. Audio stays paused until the listener taps Play.
 
