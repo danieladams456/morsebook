@@ -56,11 +56,11 @@ Save each speed or tone change immediately. During playback, pause AudioTrack, s
 
 During playback, aim to persist the audible word at least once every ten seconds, including with the screen locked. Serialize periodic saves with pause, switch, restart, manual status edits and completion. Associate frame callbacks with their stream instance so a flushed track cannot overwrite a later position or complete a different chapter. After process loss, restore the last committed word and wait for Play.
 
-### Open question for the core interface
+### Core stream interface
 
-`MorsePcmStream` accepts text, emits sequential PCM and applies `updateOptions` at the next character it generates. Its public API exposes neither the normalized words nor their frame offsets. The app can measure how many frames AudioTrack has played, but needs a mapping to identify the corresponding word. Speed changes during a chapter also change subsequent frame offsets. [Current synthesizer](../core/src/main/kotlin/com/github/danieladams456/morsebook/MorsePcmStream.kt) · [Morse spacing rules](../core/README.md)
+Construct a `DefaultMorsePcmStream` with `StreamOptions` containing the full chapter text, sample rate and an optional UTF-16 text start offset. Pass speed and tone to each `read`. Core starts at the latest playable word beginning at or before the offset, using the first word if the offset precedes it. This also resolves bookmarks after chapter edits. For a settings change, open a fresh stream at the checkpoint and pass the updated options when reading. [Core API](../core/src/main/kotlin/com/github/danieladams456/morsebook/MorsePcmStream.kt)
 
-A candidate API is a position-aware read that fills the caller’s existing PCM buffer and returns `ReadResult(framesWritten, wordStarts)`. Each entry pairs the zero-based source offset of a playable word’s start in the original chapter string with the frame offset of its first mark within this read. Source offsets remain chapter-relative across reads and resumes. Core identifies the word starts during normalization. The app can pass a saved source offset back to core to resume. The precise API is open for discussion. Keep the sequential read available to the CLI.
+The worker calls `read` with its existing PCM buffer. The returned `ReadResult` contains the frame count and a `WordStart` for each word whose first mark begins in this read. Source offsets stay relative to the original chapter across resumes. Frame offsets are relative to the first frame written by this call. The CLI uses `framesWritten` to write the PCM to its output file.
 
 The worker adds the read’s starting frame to each reported frame offset. The latest start crossed by the playback head supplies the bookmark, even halfway through a read. A read can contain several word starts or continue a long word without introducing a new one.
 

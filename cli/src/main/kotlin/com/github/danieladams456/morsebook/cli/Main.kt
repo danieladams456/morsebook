@@ -1,6 +1,10 @@
 package com.github.danieladams456.morsebook.cli
 
-import com.github.danieladams456.morsebook.MorsePcmStream
+import com.github.danieladams456.morsebook.DEFAULT_SAMPLE_RATE_HZ
+import com.github.danieladams456.morsebook.DEFAULT_TONE_HZ
+import com.github.danieladams456.morsebook.DEFAULT_WPM
+import com.github.danieladams456.morsebook.DefaultMorsePcmStream
+import com.github.danieladams456.morsebook.StreamOptions
 import com.github.danieladams456.morsebook.SynthesisOptions
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
@@ -13,7 +17,7 @@ import kotlin.system.exitProcess
 private val help = """
     Usage: morsebook --text TEXT [--output FILE] [--wpm N] [--tone-hz N]
                      [--sample-rate N] [--buffer-size SAMPLES]
-    Defaults: morse.wav, 20 WPM, 600 Hz, 48000 Hz, 4096 samples.
+    Defaults: morse.wav, $DEFAULT_WPM WPM, $DEFAULT_TONE_HZ Hz, $DEFAULT_SAMPLE_RATE_HZ Hz, 4096 samples.
     Example: morsebook --text "AE T" --output practice.wav
 """.trimIndent()
 
@@ -34,24 +38,24 @@ internal fun render(args: Array<String>) {
         require(values.put(flag, args[i + 1]) == null) { "duplicate option $flag" }
     }
     val text = requireNotNull(values["--text"]) { "--text is required" }
-    val options = SynthesisOptions.create(
-        values.getOrDefault("--wpm", "20").toDouble(),
-        values.getOrDefault("--tone-hz", "600").toDouble(),
-        values.getOrDefault("--sample-rate", "48000").toInt()
+    val options = SynthesisOptions(
+        values["--wpm"]?.toInt() ?: DEFAULT_WPM,
+        values["--tone-hz"]?.toInt() ?: DEFAULT_TONE_HZ
     )
+    val sampleRateHz = values["--sample-rate"]?.toInt() ?: DEFAULT_SAMPLE_RATE_HZ
     val size = values.getOrDefault("--buffer-size", "4096").toInt()
     require(size in 1..1048576) { "buffer size must be between 1 and 1048576 samples" }
-    val stream = MorsePcmStream(text, options)
+    val stream = DefaultMorsePcmStream(StreamOptions(text, sampleRateHz))
     val buffer = ShortArray(size)
     val bytes = ByteBuffer.allocate(size * 2).order(ByteOrder.LITTLE_ENDIAN)
     val output = Path.of(values.getOrDefault("--output", "morse.wav")).toAbsolutePath()
     val temporary = Files.createTempFile(output.parent, ".morsebook-", ".wav")
     try {
         RandomAccessFile(temporary.toFile(), "rw").use { wav ->
-            wav.write(header(0, stream.sampleRateHz))
+            wav.write(header(0, sampleRateHz))
             var payload = 0L
             while (true) {
-                val count = stream.read(buffer)
+                val count = stream.read(options, buffer).framesWritten
                 if (count == 0) break
                 payload += count * 2L
                 require(payload <= 0xffffffffL - 36) { "render exceeds RIFF size limit" }
@@ -59,7 +63,7 @@ internal fun render(args: Array<String>) {
                 wav.write(bytes.array(), 0, count * 2)
             }
             wav.seek(0)
-            wav.write(header(payload, stream.sampleRateHz))
+            wav.write(header(payload, sampleRateHz))
         }
         Files.move(temporary, output, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
     } finally {
