@@ -2,6 +2,7 @@ package com.github.danieladams456.morsebook.app
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -19,6 +20,7 @@ class BrowseTest {
 
     @Test fun browseEveryChapterAndReturnThroughBookAndLibrary() {
         val books = BundledCatalog(ui.activity.assets::open).loadBooks()
+        ui.waitUntil(10000) { ui.onAllNodesWithText("Library").fetchSemanticsNodes().isNotEmpty() }
         for (book in books) {
             ui.onNodeWithText("Library").assertIsDisplayed()
             ui.onNodeWithText(book.title).performClick()

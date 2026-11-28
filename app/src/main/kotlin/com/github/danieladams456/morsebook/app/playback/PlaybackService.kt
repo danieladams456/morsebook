@@ -31,6 +31,7 @@ interface PlaybackControls {
 class PlaybackRuntime(private val context: Context) : PlaybackControls {
     private val mutableState = MutableStateFlow(PlaybackState(historyLoaded = false))
     override val state: StateFlow<PlaybackState> = mutableState
+    internal val media by lazy { PlaybackMedia(context, this) }
     private val worker = Executors.newSingleThreadScheduledExecutor()
     private val catalog = BundledCatalog(context.assets::open)
     private val audio = AndroidAudio(context, ::focusLost)
@@ -62,9 +63,11 @@ class PlaybackRuntime(private val context: Context) : PlaybackControls {
         worker.execute { controller.select(chapter) }
     }
 
+    fun nextRequest() = request.incrementAndGet()
+
     override fun requestPlay(chapter: ChapterKey) {
         context.startForegroundService(Intent(context, PlaybackService::class.java)
-            .putExtra("request", request.incrementAndGet())
+            .putExtra("request", nextRequest())
             .putExtra("book", chapter.book).putExtra("chapter", chapter.chapter))
     }
 
@@ -95,18 +98,37 @@ class PlaybackRuntime(private val context: Context) : PlaybackControls {
 class PlaybackService : Service() {
     private val playback get() = (application as MorseApplication).playback
 
+    private var latestStart = 0
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val channel = "playback"
-        getSystemService(NotificationManager::class.java).createNotificationChannel(
-            NotificationChannel(channel, "Playback", NotificationManager.IMPORTANCE_LOW))
-        val notice = Notification.Builder(this, channel).setSmallIcon(android.R.drawable.ic_media_play)
-            .setContentTitle("MorseBook").setContentText("Morse playback").setOngoing(true).build()
-        startForeground(1, notice)
+        latestStart = startId
+        val state = playback.state.value
         val book = intent?.getStringExtra("book")
         val chapter = intent?.getStringExtra("chapter")
-        if (book == null || chapter == null) stopSelf(startId)
-        else playback.start(intent.getLongExtra("request", -1), ChapterKey(book, chapter)) { stopSelf(startId) }
+        val key = if (book != null && chapter != null) ChapterKey(book, chapter) else state.selected
+        if (key == null) {
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
+        startForeground(PlaybackMedia.ID, playback.media.notification(state.selected ?: key, state.phase))
+        if (intent?.action == PlaybackMedia.PAUSE) {
+            playback.pause()
+            finishStart(startId)
+        } else {
+            val ticket = if (intent?.action == PlaybackMedia.PLAY) playback.nextRequest()
+                else intent?.getLongExtra("request", -1) ?: -1
+            playback.start(ticket, key) { mainHandler.post { finishStart(startId) } }
+        }
         return START_NOT_STICKY
+    }
+
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
+    private fun finishStart(startId: Int) {
+        if (latestStart == startId) {
+            stopForeground(STOP_FOREGROUND_DETACH)
+            stopSelf(startId)
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
