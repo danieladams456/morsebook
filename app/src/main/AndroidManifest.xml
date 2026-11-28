@@ -1,5 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:label="MorseBook" android:allowBackup="false" android:theme="@android:style/Theme.Material.Light.NoActionBar">
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <application android:name=".playback.MorseApplication" android:label="MorseBook" android:allowBackup="false" android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <service android:name=".playback.PlaybackService" android:foregroundServiceType="mediaPlayback" android:exported="false" />
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
