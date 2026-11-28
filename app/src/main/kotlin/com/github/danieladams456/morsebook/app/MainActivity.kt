@@ -21,8 +21,19 @@ import com.github.danieladams456.morsebook.app.data.BundledCatalog
 import com.github.danieladams456.morsebook.app.playback.*
 
 class MainActivity : ComponentActivity() {
+    private companion object {
+        // Activity recreation keeps the route. A new process must initialize it from Room.
+        val processId = java.util.UUID.randomUUID().toString()
+        const val PROCESS_KEY = "morsebook.process"
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString(PROCESS_KEY, processId)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+        super.onCreate(savedInstanceState?.takeIf { it.getString(PROCESS_KEY) == processId })
         val books = BundledCatalog(assets::open).loadBooks()
         setContent { MaterialTheme { LibraryBrowser(books, (application as MorseApplication).playback) } }
     }
@@ -31,8 +42,9 @@ class MainActivity : ComponentActivity() {
 @Composable
 internal fun LibraryBrowser(books: List<Book>, playback: PlaybackControls) {
     val playbackState by playback.state.collectAsState()
-    var bookId by rememberSaveable { mutableStateOf<String?>(null) }
-    var chapterId by rememberSaveable { mutableStateOf<String?>(null) }
+    if (!playbackState.historyLoaded) return
+    var bookId by rememberSaveable { mutableStateOf(playbackState.selected?.book) }
+    var chapterId by rememberSaveable { mutableStateOf(playbackState.selected?.chapter) }
     val book = books.find { it.id == bookId }
     val chapter = book?.chapters?.find { it.id == chapterId }
     val libraryScroll = rememberScrollState()
@@ -59,7 +71,10 @@ internal fun LibraryBrowser(books: List<Book>, playback: PlaybackControls) {
                 book != null -> Column(Modifier.verticalScroll(bookScroll)) {
                     book.chapters.forEach { item ->
                         val id = ChapterKey(book.id, item.id)
-                        BrowseRow(item.title, playbackState.lastPlayed == id, playbackState.progress(id, item.textLength)) {
+                        BrowseRow(
+                            item.title, playbackState.lastPlayed == id,
+                            playbackState.progress(id, item.textLength), id in playbackState.readChapters
+                        ) {
                             playback.select(id)
                             chapterId = item.id
                         }
@@ -74,10 +89,14 @@ internal fun LibraryBrowser(books: List<Book>, playback: PlaybackControls) {
 }
 
 @Composable
-private fun BrowseRow(title: String, lastPlayed: Boolean, progress: Float? = null, open: () -> Unit) {
+private fun BrowseRow(title: String, lastPlayed: Boolean, progress: Float? = null, read: Boolean = false, open: () -> Unit) {
     ListItem(
         headlineContent = { Text(title) },
-        supportingContent = progress?.let { value -> { LinearProgressIndicator(progress = { value }) } },
+        supportingContent = when {
+            read -> ({ Text("✓", Modifier.semantics { contentDescription = "Read" }) })
+            progress != null -> ({ LinearProgressIndicator(progress = { progress }) })
+            else -> null
+        },
         trailingContent = if (lastPlayed) ({
             Text("▶", modifier = Modifier.semantics { contentDescription = "Last played" })
         }) else null,

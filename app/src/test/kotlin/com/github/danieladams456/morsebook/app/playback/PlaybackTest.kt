@@ -4,7 +4,7 @@ import com.github.danieladams456.morsebook.*
 import kotlin.test.*
 
 class PlaybackTest {
-    private val text = "E 😀 E T"
+    private var text = "E 😀 E T"
     private val settings = SynthesisOptions(20, 600)
     private val key = ChapterKey("book", "one")
     private var grantsFocus = true
@@ -143,6 +143,31 @@ class PlaybackTest {
         assertEquals(2, writes.size)
         assertEquals(five, player.state.selected)
         assertEquals(Phase.Paused, player.state.phase)
+    }
+
+    @Test fun everyTenSecondsOfPlayedFramesCommitsTheAudibleWordAndIgnoresOldTicks() {
+        text = "E ".repeat(100)
+        player.settings = settings
+        player.select(key)
+        val session = player.play()
+        val reference = DefaultMorsePcmStream(StreamOptions(text, DEFAULT_SAMPLE_RATE_HZ))
+            .read(settings, ShortArray(21 * DEFAULT_SAMPLE_RATE_HZ))
+        val expected = mutableListOf(Triple("start", key, 0))
+        for (second in 0..20) {
+            repeat(4) { player.tick(session) }
+            track.head = second * DEFAULT_SAMPLE_RATE_HZ + 1
+            player.tick(session)
+            if (second == 10 || second == 20) {
+                val word = reference.wordStarts.last { it.frameOffset < track.head }.sourceOffset
+                expected += Triple("pause", key, word)
+            }
+            assertEquals(expected, writes)
+        }
+        player.select(ChapterKey("book", "five"))
+        val committed = writes.toList()
+        track.head += 10 * DEFAULT_SAMPLE_RATE_HZ
+        player.tick(session)
+        assertEquals(committed, writes)
     }
 
     private class FakeOutput : PcmOutput {

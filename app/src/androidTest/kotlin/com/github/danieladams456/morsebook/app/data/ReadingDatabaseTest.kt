@@ -5,11 +5,66 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.github.danieladams456.morsebook.app.playback.ChapterKey
 import org.junit.Assert.*
+import org.xmlpull.v1.XmlPullParser
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class ReadingDatabaseTest {
+    @Test fun reopeningFileRestoresPartialReadAndUnreadWithLastPlayed() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val name = "reopen-${java.util.UUID.randomUUID()}.db"
+        fun open() = Room.databaseBuilder(context, ReadingDatabase::class.java, name).build()
+        try {
+            val writer = open()
+            try {
+                writer.reading().save(ChapterReading("book", "01", null))
+                writer.reading().started(ChapterKey("book", "02"), 0)
+                writer.reading().checkpoint(ChapterKey("book", "02"), 17)
+            } finally { writer.close() }
+            val reader = open()
+            try {
+                assertEquals(setOf(ChapterReading("book", "01", null), ChapterReading("book", "02", 17)),
+                    reader.reading().chapters().toSet())
+                assertEquals(LastPlayed("book", "02"), reader.reading().lastPlayed())
+            } finally { reader.close() }
+        } finally { context.deleteDatabase(name) }
+    }
+
+    @Test fun packagedBackupRulesExcludeHistoryForLegacyBackupCloudAndTransfer() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val android = "http://schemas.android.com/apk/res/android"
+        val (legacy, modern) = context.assets.openXmlResourceParser("AndroidManifest.xml").use { manifest ->
+            while (manifest.next() != XmlPullParser.END_DOCUMENT) {
+                if (manifest.eventType == XmlPullParser.START_TAG && manifest.name == "application") break
+            }
+            manifest.getAttributeResourceValue(android, "fullBackupContent", 0) to
+                manifest.getAttributeResourceValue(android, "dataExtractionRules", 0)
+        }
+        fun exclusions(resource: Int): Set<String> {
+            val result = mutableSetOf<String>()
+            val path = mutableListOf<String>()
+            context.resources.getXml(resource).use { rules ->
+                while (rules.next() != XmlPullParser.END_DOCUMENT) {
+                    when (rules.eventType) {
+                        XmlPullParser.START_TAG -> {
+                            path += rules.name
+                            if (rules.name == "exclude" && rules.getAttributeValue(null, "domain") == "database"
+                                && rules.getAttributeValue(null, "path") == ".") {
+                                result += path.joinToString("/")
+                            }
+                        }
+                        XmlPullParser.END_TAG -> path.removeAt(path.lastIndex)
+                    }
+                }
+            }
+            return result
+        }
+        assertEquals(setOf("full-backup-content/exclude"), exclusions(legacy))
+        assertEquals(setOf("data-extraction-rules/cloud-backup/exclude",
+            "data-extraction-rules/device-transfer/exclude"), exclusions(modern))
+    }
+
     @Test fun failedLastPlayedUpdateRollsBackChapterStart() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val db = Room.inMemoryDatabaseBuilder(context, ReadingDatabase::class.java).build()

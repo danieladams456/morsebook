@@ -1,7 +1,10 @@
 package com.github.danieladams456.morsebook.app.playback
 
 import android.app.*
+import android.util.Log
 import androidx.room.Room
+import com.github.danieladams456.morsebook.app.BuildConfig
+import com.github.danieladams456.morsebook.app.data.restoreReading
 import com.github.danieladams456.morsebook.app.data.ReadingDatabase
 import android.content.Context
 import android.content.Intent
@@ -26,14 +29,17 @@ interface PlaybackControls {
 }
 
 class PlaybackRuntime(private val context: Context) : PlaybackControls {
-    private val mutableState = MutableStateFlow(PlaybackState())
+    private val mutableState = MutableStateFlow(PlaybackState(historyLoaded = false))
     override val state: StateFlow<PlaybackState> = mutableState
     private val worker = Executors.newSingleThreadScheduledExecutor()
     private val catalog = BundledCatalog(context.assets::open)
     private val audio = AndroidAudio(context, ::focusLost)
     private val database = Room.databaseBuilder(context, ReadingDatabase::class.java, "reading.db").build()
     private val reading = database.reading()
-    private val controller = PlaybackController({ catalog.loadChapterText(it.book, it.chapter) }, audio, reading) {
+    private val controller = PlaybackController({ catalog.loadChapterText(it.book, it.chapter) }, audio, reading,
+        onCommit = { kind, session, head, offset ->
+            if (BuildConfig.DEBUG) Log.d("MorseCheckpoint", "$kind session=$session head=$head offset=$offset")
+        }) {
         mutableState.value = it
     }
     private var ticks: ScheduledFuture<*>? = null
@@ -41,11 +47,9 @@ class PlaybackRuntime(private val context: Context) : PlaybackControls {
 
     init {
         worker.execute {
-            val bookmarks = reading.chapters().mapNotNull { row ->
-                row.offset?.let { ChapterKey(row.book, row.chapter) to it }
-            }.toMap()
-            val last = reading.lastPlayed()?.let { ChapterKey(it.book, it.chapter) }
-            controller.restore(PlaybackState(lastPlayed = last, bookmarks = bookmarks))
+            controller.restore(restoreReading(catalog.loadBooks(), reading.chapters(), reading.lastPlayed()) {
+                catalog.loadChapterText(it.book, it.chapter)
+            })
         }
     }
 

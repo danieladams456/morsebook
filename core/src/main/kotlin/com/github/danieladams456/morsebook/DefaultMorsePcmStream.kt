@@ -32,6 +32,8 @@ class DefaultMorsePcmStream(options: StreamOptions) : MorsePcmStream {
     private var rampSamples = 0
     private var phaseStep = 0.0
     private var nextWord = words.indexOfLast { it.sourceOffset <= options.textStartOffset }.coerceAtLeast(0)
+    /** Resolved UTF-16 word start, or null for text with no playable content. */
+    val startingWordOffset: Int? = words.getOrNull(nextWord)?.sourceOffset
     private var next = words.getOrNull(nextWord)?.messageOffset ?: 0
     private var pattern = ""
     private var mark = 0
