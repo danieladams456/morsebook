@@ -1,0 +1,26 @@
+appId: com.github.danieladams456.morsebook
+---
+- launchApp:
+    clearState: true
+- assertVisible: Library
+- tapOn: The Call of the Wild
+- tapOn: Chapter II. The Law of Club and Fang
+- tapOn: Play
+- assertVisible: Pause
+- tapOn: Pause
+- assertVisible: Play
+- tapOn: Back
+- tapOn: Chapter V. The Toil of Trace and Trail
+- assertVisible: Play
+- stopApp
+- launchApp
+- assertVisible: Chapter II. The Law of Club and Fang
+- assertVisible: Play
+- tapOn: Back
+- assertVisible:
+    text: Last played
+    rightOf: Chapter II. The Law of Club and Fang
+- tapOn: Back
+- assertVisible:
+    text: Last played
+    rightOf: The Call of the Wild

@@ -20,12 +20,49 @@ import kotlin.test.assertEquals
 class SelectionRestoreTest {
     @get:Rule val ui = createComposeRule()
 
+    private fun restoredControls(history: PlaybackState) = object : PlaybackControls {
+        override val state = MutableStateFlow(history)
+        override fun select(chapter: ChapterKey) = error("unexpected selection")
+        override fun pause() = error("unexpected pause")
+        override fun requestPlay(chapter: ChapterKey) = error("unexpected play")
+    }
+
+    @Test fun freshRouteOpensLastPlayedChapterPausedWithBothIconsAndReadStatuses() {
+        val last = ChapterKey("a", "2")
+        val read = ChapterKey("a", "1")
+        val book = Book("a", "Book", listOf(Chapter("1", "One", 10), Chapter("2", "Two", 10)))
+        val history = restoreReading(listOf(book),
+            listOf(ChapterReading("a", "1", null), ChapterReading("a", "2", 300)),
+            LastPlayed("a", "2")) { "A  😀 E   " }
+        assertEquals(last, history.selected)
+        assertEquals(6, history.bookmarks[last])
+        assertEquals(setOf(read), history.readChapters)
+        val controls = restoredControls(history)
+        ui.setContent { LibraryBrowser(listOf(book), controls) }
+        ui.onNodeWithText("Two").assertIsDisplayed()
+        ui.onNodeWithText("Play").assertIsDisplayed()
+        ui.onNodeWithText("Back").performClick()
+        ui.onNode(hasText("One") and hasContentDescription("Read")).assertExists()
+        ui.onNode(hasText("Two") and hasContentDescription("Last played")).assertExists()
+        ui.onNodeWithText("Back").performClick()
+        ui.onNode(hasText("Book") and hasContentDescription("Last played")).assertExists()
+    }
+
+    @Test fun removedLastChapterDoesNotRestoreSelectionOrOrphanedIcon() {
+        val book = Book("a", "Book", listOf(Chapter("1", "One", 10)))
+        val history = restoreReading(listOf(book), emptyList(), LastPlayed("a", "removed")) { error("unexpected read") }
+        assertEquals(null, history.lastPlayed)
+        assertEquals(null, history.selected)
+        ui.setContent { LibraryBrowser(listOf(book), restoredControls(history)) }
+        ui.onNodeWithText("Library").assertIsDisplayed()
+        ui.onNodeWithContentDescription("Last played").assertDoesNotExist()
+    }
+
     @Test fun restoringOpenChapterDoesNotSendPlaybackCommands() {
-        val selected = ChapterKey("a", "5")
         val last = ChapterKey("a", "2")
         val commands = mutableListOf<String>()
         val controls = object : PlaybackControls {
-            override val state = MutableStateFlow(PlaybackState(selected = selected, lastPlayed = last,
+            override val state = MutableStateFlow(PlaybackState(lastPlayed = last,
                 bookmarks = mapOf(last to 7)))
             override fun select(chapter: ChapterKey) { commands += "select ${chapter.chapter}" }
             override fun requestPlay(chapter: ChapterKey) { commands += "play" }

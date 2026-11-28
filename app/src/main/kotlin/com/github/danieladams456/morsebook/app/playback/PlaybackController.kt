@@ -9,7 +9,9 @@ data class PlaybackState(
     val phase: Phase = Phase.Paused,
     val lastPlayed: ChapterKey? = null,
     val bookmarks: Map<ChapterKey, Int> = emptyMap(),
-    val audibleWord: Int? = null
+    val audibleWord: Int? = null,
+    val readChapters: Set<ChapterKey> = emptySet(),
+    val historyLoaded: Boolean = true
 )
 
 fun PlaybackState.progress(chapter: ChapterKey, length: Int): Float? {
@@ -42,12 +44,14 @@ class PlaybackController(
     private val text: (ChapterKey) -> String,
     private val device: AudioDevice,
     private val reading: ReadingWriter? = null,
+    private val onCommit: (String, Long, Long, Int) -> Unit = { _, _, _, _ -> },
     private val changed: (PlaybackState) -> Unit = {}
 ) {
     var state = PlaybackState()
         private set(value) { field = value; changed(value) }
     var settings = SynthesisOptions(DEFAULT_WPM, DEFAULT_TONE_HZ)
     private var generation = 0L
+    private var lastSaveHead = 0L
     private var output: PcmOutput? = null
     private var queue: RenderQueue? = null
 
@@ -87,6 +91,11 @@ class PlaybackController(
                 release()
                 return
             }
+            if (state.phase == Phase.Playing && head - lastSaveHead >= 10L * DEFAULT_SAMPLE_RATE_HZ) {
+                checkpoint()
+                lastSaveHead = head
+                onCommit("periodic", session, head, checkNotNull(state.audibleWord))
+            }
             if (rendered.finished(head)) {
                 pause()
             } else {
@@ -108,8 +117,10 @@ class PlaybackController(
             } catch (e: RuntimeException) {
                 return false
             }
+            lastSaveHead = head
+            onCommit("start", generation, head, first)
             state = state.copy(phase = Phase.Playing, lastPlayed = chapter,
-                audibleWord = word, bookmarks = state.bookmarks + (chapter to first))
+                readChapters = state.readChapters - chapter, audibleWord = word, bookmarks = state.bookmarks + (chapter to first))
         } else if (word != state.audibleWord) {
             state = state.copy(audibleWord = word)
         }
