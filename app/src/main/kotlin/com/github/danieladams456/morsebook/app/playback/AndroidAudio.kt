@@ -46,6 +46,7 @@ class AndroidAudio(
             error("AudioTrack initialization failed")
         }
         return object : PcmOutput {
+            override val bufferSizeFrames get() = track.bufferSizeInFrames
             override fun start() = track.play()
             override fun pause() = track.pause()
             override fun flush() = track.flush()

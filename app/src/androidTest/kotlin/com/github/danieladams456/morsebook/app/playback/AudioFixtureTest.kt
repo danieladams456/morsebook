@@ -13,6 +13,29 @@ import java.io.File
 
 @RunWith(AndroidJUnit4::class)
 class AudioFixtureTest {
+    @Test fun finalWordResumesOnAFreshAndroidTrack() {
+        ActivityScenario.launch(MainActivity::class.java).use {
+            val context = InstrumentationRegistry.getInstrumentation().targetContext
+            val key = ChapterKey("fixture", "ae-t")
+            val player = PlaybackController({ "AE T" }, AndroidAudio(context, {}))
+            player.settings = SynthesisOptions(20, 600)
+            player.select(key)
+            repeat(2) {
+                val session = player.play()
+                try {
+                    assertEquals(Phase.Starting, player.state.phase)
+                    val deadline = SystemClock.elapsedRealtime() + 10000
+                    while (player.state.phase != Phase.Paused && SystemClock.elapsedRealtime() < deadline) {
+                        player.tick(session)
+                        SystemClock.sleep(10)
+                    }
+                    assertEquals(Phase.Paused, player.state.phase)
+                    assertEquals(3, player.state.bookmarks[key])
+                } finally { player.pause() }
+            }
+        }
+    }
+
     @Test fun acceptedFixtureReachesAnAdvancingAndroidTrack() {
         ActivityScenario.launch(MainActivity::class.java).use {
             val context = InstrumentationRegistry.getInstrumentation().targetContext

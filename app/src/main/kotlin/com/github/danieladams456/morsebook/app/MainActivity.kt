@@ -49,10 +49,17 @@ private fun LibraryBrowser(books: List<Book>, playback: PlaybackRuntime) {
             when {
                 chapter != null -> {
                     Text(chapter.title, style = MaterialTheme.typography.titleLarge)
-                    val active = playbackState.phase != Phase.Paused
+                    val key = ChapterKey(book.id, chapter.id)
+                    val selected = playbackState.selected == key
+                    val active = selected && playbackState.phase != Phase.Paused
                     Button(onClick = {
-                        if (active) playback.pause() else playback.requestPlay(ChapterKey(book.id, chapter.id))
+                        if (active) playback.pause() else playback.requestPlay(key)
                     }) { Text(if (active) "Pause" else "Play") }
+                    if (selected) when (playbackState.startupError) {
+                        StartupError.FocusDenied -> Text("Audio focus unavailable. Please try again.")
+                        StartupError.PlaybackFailed -> Text("Couldn’t start playback. Please try again.")
+                        null -> Unit
+                    }
                 }
                 book != null -> Column(Modifier.verticalScroll(bookScroll)) {
                     book.chapters.forEach { item ->

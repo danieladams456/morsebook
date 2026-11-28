@@ -3,13 +3,15 @@ package com.github.danieladams456.morsebook.app.playback
 import com.github.danieladams456.morsebook.*
 
 data class ChapterKey(val book: String, val chapter: String)
+enum class StartupError { FocusDenied, PlaybackFailed }
 enum class Phase { Paused, Starting, Playing }
 data class PlaybackState(
     val selected: ChapterKey? = null,
     val phase: Phase = Phase.Paused,
     val lastPlayed: ChapterKey? = null,
     val bookmarks: Map<ChapterKey, Int> = emptyMap(),
-    val audibleWord: Int? = null
+    val audibleWord: Int? = null,
+    val startupError: StartupError? = null
 )
 
 interface AudioDevice {
@@ -19,6 +21,7 @@ interface AudioDevice {
 }
 
 interface PcmOutput : AutoCloseable {
+    val bufferSizeFrames: Int
     fun start()
     fun write(samples: ShortArray, offset: Int, length: Int): Int
     fun playedFrames(): Long
@@ -42,20 +45,27 @@ class PlaybackController(
     fun select(chapter: ChapterKey) {
         if (chapter == state.selected) return
         pause()
-        state = state.copy(selected = chapter, audibleWord = null)
+        state = state.copy(selected = chapter, audibleWord = null, startupError = null)
     }
 
     fun play(): Long {
         val chapter = state.selected ?: return generation
-        if (output != null || !device.acquireFocus()) return generation
+        if (output != null) return generation
+        state = state.copy(startupError = null)
+        if (!device.acquireFocus()) {
+            state = state.copy(startupError = StartupError.FocusDenied)
+            return generation
+        }
         generation++
         try {
             queue = RenderQueue(text(chapter), state.bookmarks[chapter] ?: 0, settings)
             output = device.open()
             output!!.start()
             state = state.copy(phase = Phase.Starting)
+        } catch (e: java.io.IOException) {
+            release(StartupError.PlaybackFailed)
         } catch (e: RuntimeException) {
-            release()
+            release(StartupError.PlaybackFailed)
         }
         return generation
     }
@@ -103,7 +113,7 @@ class PlaybackController(
         }
     }
 
-    private fun release() {
+    private fun release(error: StartupError? = null) {
         generation++
         val track = output
         output = null
@@ -113,7 +123,7 @@ class PlaybackController(
         } finally {
             try { track?.close() } finally {
                 device.abandonFocus()
-                state = state.copy(phase = Phase.Paused)
+                state = state.copy(phase = Phase.Paused, startupError = error)
             }
         }
     }
@@ -126,10 +136,14 @@ private class RenderQueue(text: String, offset: Int, private val settings: Synth
     private val blocks = ArrayDeque<Block>()
     private val starts = ArrayDeque<Start>()
     private var rendered = 0L
+    private var paddingWritten = 0
+    private var headAdvanced = false
+    private var silence: ShortArray? = null
     private var eof = false
     private var audible: Int? = null
 
     fun feed(output: PcmOutput, head: Long) {
+        if (head > 0) headAdvanced = true
         // Limit synthesis per tick so that commands can interrupt the initial buffer fill.
         repeat(4) {
             if (!eof && rendered - head < 12L * DEFAULT_SAMPLE_RATE_HZ) {
@@ -151,6 +165,17 @@ private class RenderQueue(text: String, offset: Int, private val settings: Synth
             block.position += written
             if (written < remaining) return
             blocks.removeFirst()
+        }
+        // Only prime a fresh track whose entire real stream fits below its start threshold.
+        if (eof && !headAdvanced && rendered in 1L until output.bufferSizeFrames.toLong()) {
+            val remaining = output.bufferSizeFrames - rendered.toInt() - paddingWritten
+            if (remaining > 0) {
+                val zeros = silence ?: ShortArray(minOf(4096, remaining)).also { silence = it }
+                val length = minOf(remaining, zeros.size)
+                val written = output.write(zeros, 0, length)
+                check(written in 0..length) { "Audio output rejected silence ($written)" }
+                paddingWritten += written
+            }
         }
     }
 
