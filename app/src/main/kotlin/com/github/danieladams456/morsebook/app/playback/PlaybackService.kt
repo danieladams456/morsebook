@@ -1,10 +1,13 @@
 package com.github.danieladams456.morsebook.app.playback
 
 import android.app.*
+import androidx.room.Room
+import com.github.danieladams456.morsebook.app.data.ReadingDatabase
 import android.content.Context
 import android.content.Intent
 import android.os.IBinder
 import com.github.danieladams456.morsebook.app.data.BundledCatalog
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
@@ -15,33 +18,53 @@ class MorseApplication : Application() {
     val playback by lazy { PlaybackRuntime(this) }
 }
 
-class PlaybackRuntime(private val context: Context) {
-    val state = MutableStateFlow(PlaybackState())
+interface PlaybackControls {
+    val state: StateFlow<PlaybackState>
+    fun select(chapter: ChapterKey)
+    fun requestPlay(chapter: ChapterKey)
+    fun pause()
+}
+
+class PlaybackRuntime(private val context: Context) : PlaybackControls {
+    private val mutableState = MutableStateFlow(PlaybackState())
+    override val state: StateFlow<PlaybackState> = mutableState
     private val worker = Executors.newSingleThreadScheduledExecutor()
     private val catalog = BundledCatalog(context.assets::open)
     private val audio = AndroidAudio(context, ::focusLost)
-    private val controller = PlaybackController({ catalog.loadChapterText(it.book, it.chapter) }, audio) {
-        state.value = it
+    private val database = Room.databaseBuilder(context, ReadingDatabase::class.java, "reading.db").build()
+    private val reading = database.reading()
+    private val controller = PlaybackController({ catalog.loadChapterText(it.book, it.chapter) }, audio, reading) {
+        mutableState.value = it
     }
     private var ticks: ScheduledFuture<*>? = null
     private val request = AtomicLong()
+
+    init {
+        worker.execute {
+            val bookmarks = reading.chapters().mapNotNull { row ->
+                row.offset?.let { ChapterKey(row.book, row.chapter) to it }
+            }.toMap()
+            val last = reading.lastPlayed()?.let { ChapterKey(it.book, it.chapter) }
+            controller.restore(PlaybackState(lastPlayed = last, bookmarks = bookmarks))
+        }
+    }
 
     private fun focusLost(focus: android.media.AudioFocusRequest) {
         worker.execute { if (audio.owns(focus)) controller.pause() }
     }
 
-    fun select(chapter: ChapterKey) {
+    override fun select(chapter: ChapterKey) {
         if (state.value.selected != chapter) request.incrementAndGet()
         worker.execute { controller.select(chapter) }
     }
 
-    fun requestPlay(chapter: ChapterKey) {
+    override fun requestPlay(chapter: ChapterKey) {
         context.startForegroundService(Intent(context, PlaybackService::class.java)
             .putExtra("request", request.incrementAndGet())
             .putExtra("book", chapter.book).putExtra("chapter", chapter.chapter))
     }
 
-    fun pause() {
+    override fun pause() {
         request.incrementAndGet()
         worker.execute { controller.pause() }
     }

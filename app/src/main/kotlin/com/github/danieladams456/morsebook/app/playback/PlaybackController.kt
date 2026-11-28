@@ -12,6 +12,17 @@ data class PlaybackState(
     val audibleWord: Int? = null
 )
 
+fun PlaybackState.progress(chapter: ChapterKey, length: Int): Float? {
+    val saved = bookmarks[chapter] ?: return null
+    val offset = if (selected == chapter && phase == Phase.Playing) audibleWord ?: saved else saved
+    return offset.toFloat() / length
+}
+
+interface ReadingWriter {
+    fun started(chapter: ChapterKey, offset: Int)
+    fun checkpoint(chapter: ChapterKey, offset: Int)
+}
+
 interface AudioDevice {
     fun acquireFocus(): Boolean
     fun abandonFocus()
@@ -30,6 +41,7 @@ interface PcmOutput : AutoCloseable {
 class PlaybackController(
     private val text: (ChapterKey) -> String,
     private val device: AudioDevice,
+    private val reading: ReadingWriter? = null,
     private val changed: (PlaybackState) -> Unit = {}
 ) {
     var state = PlaybackState()
@@ -38,6 +50,11 @@ class PlaybackController(
     private var generation = 0L
     private var output: PcmOutput? = null
     private var queue: RenderQueue? = null
+
+    fun restore(history: PlaybackState) {
+        check(output == null)
+        state = history
+    }
 
     fun select(chapter: ChapterKey) {
         if (chapter == state.selected) return
@@ -66,7 +83,10 @@ class PlaybackController(
         val rendered = checkNotNull(queue)
         try {
             val head = track.playedFrames()
-            observe(head)
+            if (!observe(head)) {
+                release()
+                return
+            }
             if (rendered.finished(head)) {
                 pause()
             } else {
@@ -77,15 +97,23 @@ class PlaybackController(
         }
     }
 
-    private fun observe(head: Long) {
-        val chapter = state.selected ?: return
-        val word = queue?.wordAt(head) ?: return
+    /** A rejected start transaction leaves the previous reading history intact. */
+    private fun observe(head: Long): Boolean {
+        val chapter = state.selected ?: return true
+        val word = queue?.wordAt(head) ?: return true
         if (state.phase == Phase.Starting) {
+            val first = checkNotNull(queue?.firstWord)
+            try {
+                reading?.started(chapter, first)
+            } catch (e: RuntimeException) {
+                return false
+            }
             state = state.copy(phase = Phase.Playing, lastPlayed = chapter,
-                audibleWord = word, bookmarks = state.bookmarks + (chapter to word))
+                audibleWord = word, bookmarks = state.bookmarks + (chapter to first))
         } else if (word != state.audibleWord) {
             state = state.copy(audibleWord = word)
         }
+        return true
     }
 
     fun pause() {
@@ -94,12 +122,20 @@ class PlaybackController(
             track.pause()
             observe(track.playedFrames())
         } finally {
-            val chapter = state.selected
-            val word = state.audibleWord
-            if (state.phase == Phase.Playing && chapter != null && word != null) {
-                state = state.copy(bookmarks = state.bookmarks + (chapter to word))
+            try {
+                checkpoint()
+            } finally {
+                release()
             }
-            release()
+        }
+    }
+
+    private fun checkpoint() {
+        val chapter = state.selected
+        val word = state.audibleWord
+        if (state.phase == Phase.Playing && chapter != null && word != null) {
+            reading?.checkpoint(chapter, word)
+            state = state.copy(bookmarks = state.bookmarks + (chapter to word))
         }
     }
 
@@ -128,6 +164,8 @@ private class RenderQueue(text: String, offset: Int, private val settings: Synth
     private var rendered = 0L
     private var eof = false
     private var audible: Int? = null
+    var firstWord: Int? = null
+        private set
 
     fun feed(output: PcmOutput, head: Long) {
         // Limit synthesis per tick so that commands can interrupt the initial buffer fill.
@@ -137,6 +175,7 @@ private class RenderQueue(text: String, offset: Int, private val settings: Synth
                 val read = stream.read(settings, samples)
                 eof = read.framesWritten == 0
                 if (!eof) {
+                    if (firstWord == null) firstWord = read.wordStarts.firstOrNull()?.sourceOffset
                     for (word in read.wordStarts) starts += Start(rendered + word.frameOffset, word.sourceOffset)
                     rendered += read.framesWritten
                     blocks += Block(samples, read.framesWritten)
