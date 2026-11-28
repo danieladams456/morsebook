@@ -1,0 +1,29 @@
+appId: com.github.danieladams456.morsebook
+---
+- launchApp:
+    clearState: true
+- tapOn: The Call of the Wild
+- tapOn: Chapter II. The Law of Club and Fang
+- assertVisible: CW speed 20 WPM
+- assertVisible: Tone 500 Hz
+- tapOn: Play
+- assertVisible: Pause
+- tapOn: Increase CW speed
+- tapOn: Increase Tone
+- assertVisible: CW speed 21 WPM
+- assertVisible: Tone 550 Hz
+- assertVisible: Pause
+- tapOn: Pause
+- tapOn: Increase CW speed
+- assertVisible: Play
+- tapOn: Back
+- tapOn: Chapter V. The Toil of Trace and Trail
+- assertVisible: CW speed 22 WPM
+- assertVisible: Tone 550 Hz
+- assertVisible: Play
+- stopApp
+- launchApp
+- assertVisible: Chapter II. The Law of Club and Fang
+- assertVisible: CW speed 22 WPM
+- assertVisible: Tone 550 Hz
+- assertVisible: Play

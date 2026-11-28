@@ -21,6 +21,7 @@ class SelectionTest {
         val second = ChapterKey("the-call-of-the-wild", "02")
         fun tap(title: String) = ui.onNodeWithText(title).performClick()
         fun marked(title: String) = ui.onNode(hasText(title) and hasContentDescription("Last played"))
+        ui.waitUntil(10000) { ui.onAllNodesWithText(book).fetchSemanticsNodes().isNotEmpty() }
         tap(book)
         tap(two)
         tap("Play")

@@ -11,7 +11,8 @@ data class PlaybackState(
     val bookmarks: Map<ChapterKey, Int> = emptyMap(),
     val audibleWord: Int? = null,
     val readChapters: Set<ChapterKey> = emptySet(),
-    val historyLoaded: Boolean = true
+    val historyLoaded: Boolean = true,
+    val settings: SynthesisOptions = SynthesisOptions(DEFAULT_WPM, DEFAULT_TONE_HZ)
 )
 
 fun PlaybackState.progress(chapter: ChapterKey, length: Int): Float? {
@@ -49,7 +50,6 @@ class PlaybackController(
 ) {
     var state = PlaybackState()
         private set(value) { field = value; changed(value) }
-    var settings = SynthesisOptions(DEFAULT_WPM, DEFAULT_TONE_HZ)
     private var generation = 0L
     private var lastSaveHead = 0L
     private var output: PcmOutput? = null
@@ -68,21 +68,42 @@ class PlaybackController(
 
     fun play(): Long {
         val chapter = state.selected ?: return generation
-        if (output != null || !device.acquireFocus()) return generation
+        if (state.phase != Phase.Paused) return generation
         generation++
+        open(chapter)
+        return generation
+    }
+
+    private fun open(chapter: ChapterKey) {
+        if (!device.acquireFocus()) {
+            state = state.copy(phase = Phase.Paused)
+            return
+        }
         try {
-            queue = RenderQueue(text(chapter), state.bookmarks[chapter] ?: 0, settings)
+            queue = RenderQueue(text(chapter), state.bookmarks[chapter] ?: 0, state.settings)
             output = device.open()
             output!!.start()
             state = state.copy(phase = Phase.Starting)
         } catch (e: RuntimeException) {
             release()
         }
+    }
+
+    fun changeSettings(settings: SynthesisOptions): Long {
+        if (state.settings == settings) return generation
+        val resume = state.phase != Phase.Paused
+        pause()
+        state = state.copy(settings = settings, phase = if (resume) Phase.Starting else Phase.Paused)
         return generation
     }
 
     fun tick(session: Long) {
         if (session != generation) return
+        // Defer the replacement track to the next worker tick so Pause or a further edit can cancel it.
+        if (state.phase == Phase.Starting && output == null) {
+            open(checkNotNull(state.selected))
+            return // Allow commands queued during preparation to run before supplying PCM.
+        }
         val track = output ?: return
         val rendered = checkNotNull(queue)
         try {
@@ -128,7 +149,14 @@ class PlaybackController(
     }
 
     fun pause() {
-        val track = output ?: return
+        val track = output
+        if (track == null) {
+            if (state.phase == Phase.Starting) {
+                generation++
+                state = state.copy(phase = Phase.Paused)
+            }
+            return
+        }
         try {
             track.pause()
             observe(track.playedFrames())

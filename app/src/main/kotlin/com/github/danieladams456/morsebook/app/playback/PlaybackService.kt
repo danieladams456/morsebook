@@ -1,6 +1,8 @@
 package com.github.danieladams456.morsebook.app.playback
 
 import android.app.*
+import com.github.danieladams456.morsebook.app.data.PlaybackSettings
+import kotlinx.coroutines.runBlocking
 import android.util.Log
 import androidx.room.Room
 import com.github.danieladams456.morsebook.app.BuildConfig
@@ -26,6 +28,7 @@ interface PlaybackControls {
     fun select(chapter: ChapterKey)
     fun requestPlay(chapter: ChapterKey)
     fun pause()
+    fun adjustSettings(wpmDelta: Int = 0, toneDelta: Int = 0)
 }
 
 class PlaybackRuntime(private val context: Context) : PlaybackControls {
@@ -34,6 +37,8 @@ class PlaybackRuntime(private val context: Context) : PlaybackControls {
     internal val media by lazy { PlaybackMedia(context, this) }
     private val worker = Executors.newSingleThreadScheduledExecutor()
     private val catalog = BundledCatalog(context.assets::open)
+    private val settings = PlaybackSettings(context)
+    private var tickSession = 0L
     private val audio = AndroidAudio(context, ::focusLost)
     private val database = Room.databaseBuilder(context, ReadingDatabase::class.java, "reading.db").build()
     private val reading = database.reading()
@@ -50,7 +55,7 @@ class PlaybackRuntime(private val context: Context) : PlaybackControls {
         worker.execute {
             controller.restore(restoreReading(catalog.loadBooks(), reading.chapters(), reading.lastPlayed()) {
                 catalog.loadChapterText(it.book, it.chapter)
-            })
+            }.copy(settings = runBlocking { settings.load() }))
         }
     }
 
@@ -71,6 +76,18 @@ class PlaybackRuntime(private val context: Context) : PlaybackControls {
             .putExtra("book", chapter.book).putExtra("chapter", chapter.chapter))
     }
 
+    override fun adjustSettings(wpmDelta: Int, toneDelta: Int) {
+        worker.execute {
+            val old = controller.state.settings
+            val updated = old.copy(wpm = (old.wpm + wpmDelta).coerceIn(5, 100),
+                toneHz = (old.toneHz + toneDelta).coerceIn(300, 1200))
+            if (updated != old) {
+                tickSession = controller.changeSettings(updated)
+                runBlocking { settings.save(updated) }
+            }
+        }
+    }
+
     override fun pause() {
         request.incrementAndGet()
         worker.execute { controller.pause() }
@@ -83,9 +100,9 @@ class PlaybackRuntime(private val context: Context) : PlaybackControls {
                 return@execute
             }
             ticks?.cancel(false)
-            val session = controller.play()
+            tickSession = controller.play()
             ticks = worker.scheduleWithFixedDelay({
-                controller.tick(session)
+                controller.tick(tickSession)
                 if (controller.state.phase == Phase.Paused) {
                     ticks?.cancel(false)
                     stopped()
