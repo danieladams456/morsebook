@@ -1,14 +1,38 @@
 plugins {
-    alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.compose)
     alias(libs.plugins.kotlin.serialization)
 }
 
-sourceSets.main {
-    resources.srcDir("bundled-content")
+android {
+    namespace = "com.github.danieladams456.morsebook.app"
+    compileSdk = 36
+    defaultConfig {
+        applicationId = "com.github.danieladams456.morsebook"
+        minSdk = 26
+        targetSdk = 36
+        versionCode = 1
+        versionName = "0.1"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    buildFeatures { compose = true }
+    sourceSets["main"].assets.srcDir("bundled-content")
+    sourceSets["test"].resources.srcDir("bundled-content")
+    testOptions.unitTests.isIncludeAndroidResources = true
 }
 
 dependencies {
+    implementation(project(":core"))
     implementation(libs.kotlinx.serialization.json)
-    testImplementation(project(":core"))
+    implementation(platform("androidx.compose:compose-bom:2025.09.01"))
+    implementation("androidx.activity:activity-compose:1.10.1")
+    implementation("androidx.compose.material3:material3")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
     testImplementation(libs.kotlin.test.junit)
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    testImplementation("org.robolectric:robolectric:4.16")
 }
