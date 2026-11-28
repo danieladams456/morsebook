@@ -61,12 +61,17 @@ internal fun LibraryBrowser(books: List<Book>, playback: PlaybackControls) {
                 style = MaterialTheme.typography.headlineMedium
             )
             when {
-                chapter != null -> {
+                chapter != null -> Column(Modifier.verticalScroll(rememberScrollState())) {
                     Text(chapter.title, style = MaterialTheme.typography.titleLarge)
                     val active = playbackState.phase != Phase.Paused
                     Button(onClick = {
                         if (active) playback.pause() else playback.requestPlay(ChapterKey(book.id, chapter.id))
                     }) { Text(if (active) "Pause" else "Play") }
+                    val settings = playbackState.settings
+                    SettingControl("CW speed", "${settings.wpm} WPM", settings.wpm > 5, settings.wpm < 100,
+                        { playback.adjustSettings(wpmDelta = -1) }, { playback.adjustSettings(wpmDelta = 1) })
+                    SettingControl("Tone", "${settings.toneHz} Hz", settings.toneHz > 300, settings.toneHz < 1200,
+                        { playback.adjustSettings(toneDelta = -50) }, { playback.adjustSettings(toneDelta = 50) })
                 }
                 book != null -> Column(Modifier.verticalScroll(bookScroll)) {
                     book.chapters.forEach { item ->
@@ -103,4 +108,18 @@ private fun BrowseRow(title: String, lastPlayed: Boolean, progress: Float? = nul
         modifier = Modifier.fillMaxWidth().clickable(onClick = open)
     )
     HorizontalDivider()
+}
+
+@Composable
+private fun SettingControl(label: String, value: String, canDecrease: Boolean, canIncrease: Boolean,
+                           decrease: () -> Unit, increase: () -> Unit) {
+    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        Text("$label $value", Modifier.weight(1f))
+        TextButton(decrease, Modifier.semantics { contentDescription = "Decrease $label" }, enabled = canDecrease) {
+            Text("−")
+        }
+        TextButton(increase, Modifier.semantics { contentDescription = "Increase $label" }, enabled = canIncrease) {
+            Text("+")
+        }
+    }
 }

@@ -18,7 +18,10 @@ class PlaybackTest {
             check(!rejectStart)
             writes += Triple("start", chapter, offset)
         }
-        override fun checkpoint(chapter: ChapterKey, offset: Int) { writes += Triple("pause", chapter, offset) }
+        override fun checkpoint(chapter: ChapterKey, offset: Int) {
+            track.events += "checkpoint"
+            writes += Triple("pause", chapter, offset)
+        }
     }
     private val player = PlaybackController(
         { text }, object : AudioDevice {
@@ -37,7 +40,7 @@ class PlaybackTest {
             .read(settings, reference)
         assertEquals(listOf(0, 5, 7), render.wordStarts.map { it.sourceOffset })
         player.select(key)
-        player.settings = settings
+        player.changeSettings(settings)
         val session = player.play()
         repeat(100) { player.tick(session) }
         assertEquals(reference.take(render.framesWritten), track.accepted)
@@ -47,12 +50,61 @@ class PlaybackTest {
         player.pause()
         assertEquals(key, player.state.lastPlayed)
         assertEquals(5, player.state.bookmarks[key])
-        assertEquals(listOf("pause", "head", "flush", "close"), track.events.takeLast(4))
+        assertEquals(listOf("pause", "head", "checkpoint", "flush", "close"), track.events.takeLast(5))
         val resumed = player.play()
         player.tick(session)
         assertTrue(track.accepted.isEmpty())
         player.tick(resumed)
         assertEquals(reference.drop(render.wordStarts[1].frameOffset).take(track.accepted.size), track.accepted)
+    }
+
+    @Test fun midWordEditsRebuildFromAudibleBookmarkAndDiscardQueuedTail() {
+        for (edited in listOf(SynthesisOptions(25, 500), SynthesisOptions(20, 700))) {
+            val defaults = SynthesisOptions(DEFAULT_WPM, DEFAULT_TONE_HZ)
+            player.restore(PlaybackState(selected = key))
+            val original = player.play()
+            repeat(100) { player.tick(original) }
+            val old = DefaultMorsePcmStream(StreamOptions(text, DEFAULT_SAMPLE_RATE_HZ))
+                .read(defaults, ShortArray(100000))
+            assertTrue(track.accepted.size > old.wordStarts[2].frameOffset)
+            track.head = old.wordStarts[1].frameOffset + 500
+            val rebuilt = player.changeSettings(edited)
+            assertEquals(Triple("pause", key, 5), writes.last())
+            assertEquals(listOf("pause", "head", "checkpoint", "flush", "close"), track.events.takeLast(5))
+            player.tick(original)
+            repeat(100) { player.tick(rebuilt) }
+            val expected = ShortArray(100000)
+            val read = DefaultMorsePcmStream(StreamOptions(text, DEFAULT_SAMPLE_RATE_HZ, 5)).read(edited, expected)
+            assertEquals(expected.take(read.framesWritten), track.accepted)
+            player.pause()
+        }
+    }
+
+    @Test fun consecutiveEditsAndPauseOrSwitchCancelPendingRebuild() {
+        player.restore(PlaybackState(selected = key, bookmarks = mapOf(key to 5)))
+        for (switch in listOf(false, true)) {
+            player.select(key)
+            val old = player.play()
+            player.tick(old)
+            track.head = 1
+            val first = player.changeSettings(SynthesisOptions(26, 500))
+            val second = player.changeSettings(SynthesisOptions(26, 750))
+            player.tick(first)
+            if (switch) {
+                player.select(ChapterKey("book", "two"))
+            } else {
+                player.tick(second)
+                assertTrue(track.accepted.isEmpty())
+                player.pause()
+            }
+            val before = track.events.size
+            player.tick(second)
+            val paused = player.changeSettings(SynthesisOptions(20, 500))
+            player.tick(paused)
+            assertEquals(before, track.events.size)
+            assertEquals(Phase.Paused, player.state.phase)
+            assertEquals(5, player.state.bookmarks[key])
+        }
     }
 
     @Test fun pauseBeforeFirstFrameAndStartupFailureLeaveHistoryUntouched() {
@@ -147,7 +199,7 @@ class PlaybackTest {
 
     @Test fun everyTenSecondsOfPlayedFramesCommitsTheAudibleWordAndIgnoresOldTicks() {
         text = "E ".repeat(100)
-        player.settings = settings
+        player.changeSettings(settings)
         player.select(key)
         val session = player.play()
         val reference = DefaultMorsePcmStream(StreamOptions(text, DEFAULT_SAMPLE_RATE_HZ))

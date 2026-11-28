@@ -1,6 +1,15 @@
 package com.github.danieladams456.morsebook.app.data
 
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.room.Room
+import com.github.danieladams456.morsebook.DEFAULT_TONE_HZ
+import com.github.danieladams456.morsebook.DEFAULT_WPM
+import com.github.danieladams456.morsebook.SynthesisOptions
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.runBlocking
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.github.danieladams456.morsebook.app.playback.ChapterKey
@@ -31,7 +40,30 @@ class ReadingDatabaseTest {
         } finally { context.deleteDatabase(name) }
     }
 
-    @Test fun packagedBackupRulesExcludeHistoryForLegacyBackupCloudAndTransfer() {
+    @Test fun settingsUseCoreDefaultsAndReopenWithBothEdits() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val file = java.io.File(context.cacheDir, "${java.util.UUID.randomUUID()}.preferences_pb")
+        suspend fun withStore(check: suspend (PlaybackSettings) -> Unit) {
+            val lifetime = Job()
+            val store = PreferenceDataStoreFactory.create(scope = CoroutineScope(lifetime + Dispatchers.IO)) { file }
+            try {
+                check(PlaybackSettings(store))
+            } finally { lifetime.cancelAndJoin() }
+        }
+        try {
+            withStore { settings ->
+                assertEquals(SynthesisOptions(DEFAULT_WPM, DEFAULT_TONE_HZ), settings.load())
+                settings.save(SynthesisOptions(27, DEFAULT_TONE_HZ))
+            }
+            withStore { settings ->
+                assertEquals(SynthesisOptions(27, DEFAULT_TONE_HZ), settings.load())
+                settings.save(SynthesisOptions(27, 750))
+            }
+            withStore { assertEquals(SynthesisOptions(27, 750), it.load()) }
+        } finally { file.delete() }
+    }
+
+    @Test fun packagedBackupRulesExcludeHistoryAndSettingsForLegacyBackupCloudAndTransfer() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val android = "http://schemas.android.com/apk/res/android"
         val (legacy, modern) = context.assets.openXmlResourceParser("AndroidManifest.xml").use { manifest ->
@@ -41,7 +73,7 @@ class ReadingDatabaseTest {
             manifest.getAttributeResourceValue(android, "fullBackupContent", 0) to
                 manifest.getAttributeResourceValue(android, "dataExtractionRules", 0)
         }
-        fun exclusions(resource: Int): Set<String> {
+        fun exclusions(resource: Int, domain: String, location: String): Set<String> {
             val result = mutableSetOf<String>()
             val path = mutableListOf<String>()
             context.resources.getXml(resource).use { rules ->
@@ -49,8 +81,8 @@ class ReadingDatabaseTest {
                     when (rules.eventType) {
                         XmlPullParser.START_TAG -> {
                             path += rules.name
-                            if (rules.name == "exclude" && rules.getAttributeValue(null, "domain") == "database"
-                                && rules.getAttributeValue(null, "path") == ".") {
+                            if (rules.name == "exclude" && rules.getAttributeValue(null, "domain") == domain
+                                && rules.getAttributeValue(null, "path") == location) {
                                 result += path.joinToString("/")
                             }
                         }
@@ -60,9 +92,11 @@ class ReadingDatabaseTest {
             }
             return result
         }
-        assertEquals(setOf("full-backup-content/exclude"), exclusions(legacy))
-        assertEquals(setOf("data-extraction-rules/cloud-backup/exclude",
-            "data-extraction-rules/device-transfer/exclude"), exclusions(modern))
+        for ((domain, location) in listOf("database" to ".", "file" to "datastore")) {
+            assertEquals(setOf("full-backup-content/exclude"), exclusions(legacy, domain, location))
+            assertEquals(setOf("data-extraction-rules/cloud-backup/exclude",
+                "data-extraction-rules/device-transfer/exclude"), exclusions(modern, domain, location))
+        }
     }
 
     @Test fun failedLastPlayedUpdateRollsBackChapterStart() {

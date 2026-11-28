@@ -23,6 +23,7 @@ class SelectionRestoreTest {
     private fun restoredControls(history: PlaybackState) = object : PlaybackControls {
         override val state = MutableStateFlow(history)
         override fun select(chapter: ChapterKey) = error("unexpected selection")
+        override fun adjustSettings(wpmDelta: Int, toneDelta: Int) = error("unexpected edit")
         override fun pause() = error("unexpected pause")
         override fun requestPlay(chapter: ChapterKey) = error("unexpected play")
     }
@@ -66,6 +67,7 @@ class SelectionRestoreTest {
                 bookmarks = mapOf(last to 7)))
             override fun select(chapter: ChapterKey) { commands += "select ${chapter.chapter}" }
             override fun requestPlay(chapter: ChapterKey) { commands += "play" }
+            override fun adjustSettings(wpmDelta: Int, toneDelta: Int) { commands += "adjust $wpmDelta $toneDelta" }
             override fun pause() { commands += "pause" }
         }
         val book = Book("a", "Book", listOf(Chapter("2", "Two", 20), Chapter("5", "Five", 20)))
@@ -81,5 +83,10 @@ class SelectionRestoreTest {
         ui.onNodeWithText("Five").assertIsDisplayed()
         ui.onNodeWithText("Play").assertIsDisplayed()
         assertEquals(listOf("select 5"), commands)
+        ui.onNodeWithText("CW speed 20 WPM").assertIsDisplayed()
+        ui.onNodeWithText("Tone 500 Hz").assertIsDisplayed()
+        ui.onNodeWithContentDescription("Increase CW speed").performClick()
+        ui.onNodeWithContentDescription("Decrease Tone").performClick()
+        assertEquals(listOf("select 5", "adjust 1 0", "adjust 0 -50"), commands)
     }
 }
