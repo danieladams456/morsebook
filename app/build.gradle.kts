@@ -1,4 +1,5 @@
 plugins {
+    alias(libs.plugins.ksp)
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose)
     alias(libs.plugins.kotlin.serialization)
@@ -26,6 +27,8 @@ android {
 }
 
 dependencies {
+    implementation(libs.room.runtime)
+    ksp(libs.room.compiler)
     implementation(project(":core"))
     implementation(libs.kotlinx.serialization.json)
     implementation(platform("androidx.compose:compose-bom:2025.09.01"))
@@ -35,6 +38,8 @@ dependencies {
     testImplementation(libs.kotlin.test.junit)
     testImplementation("androidx.compose.ui:ui-test-junit4")
     testImplementation("org.robolectric:robolectric:4.16")
+    androidTestImplementation(platform("androidx.compose:compose-bom:2025.09.01"))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test:core-ktx:1.6.1")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")

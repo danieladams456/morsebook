@@ -11,6 +11,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.github.danieladams456.morsebook.app.data.Book
@@ -27,7 +29,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun LibraryBrowser(books: List<Book>, playback: PlaybackRuntime) {
+internal fun LibraryBrowser(books: List<Book>, playback: PlaybackControls) {
     val playbackState by playback.state.collectAsState()
     var bookId by rememberSaveable { mutableStateOf<String?>(null) }
     var chapterId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -56,14 +58,15 @@ private fun LibraryBrowser(books: List<Book>, playback: PlaybackRuntime) {
                 }
                 book != null -> Column(Modifier.verticalScroll(bookScroll)) {
                     book.chapters.forEach { item ->
-                        BrowseRow(item.title) {
-                            playback.select(ChapterKey(book.id, item.id))
+                        val id = ChapterKey(book.id, item.id)
+                        BrowseRow(item.title, playbackState.lastPlayed == id, playbackState.progress(id, item.textLength)) {
+                            playback.select(id)
                             chapterId = item.id
                         }
                     }
                 }
                 else -> Column(Modifier.verticalScroll(libraryScroll)) {
-                    books.forEach { item -> BrowseRow(item.title) { bookId = item.id } }
+                    books.forEach { item -> BrowseRow(item.title, playbackState.lastPlayed?.book == item.id) { bookId = item.id } }
                 }
             }
         }
@@ -71,9 +74,13 @@ private fun LibraryBrowser(books: List<Book>, playback: PlaybackRuntime) {
 }
 
 @Composable
-private fun BrowseRow(title: String, open: () -> Unit) {
+private fun BrowseRow(title: String, lastPlayed: Boolean, progress: Float? = null, open: () -> Unit) {
     ListItem(
         headlineContent = { Text(title) },
+        supportingContent = progress?.let { value -> { LinearProgressIndicator(progress = { value }) } },
+        trailingContent = if (lastPlayed) ({
+            Text("▶", modifier = Modifier.semantics { contentDescription = "Last played" })
+        }) else null,
         modifier = Modifier.fillMaxWidth().clickable(onClick = open)
     )
     HorizontalDivider()
