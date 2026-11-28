@@ -1,0 +1,166 @@
+{
+  "books": [
+    {
+      "id": "the-call-of-the-wild",
+      "title": "The Call of the Wild",
+      "chapters": [
+        {
+          "id": "01",
+          "title": "Chapter I. Into the Primitive",
+          "textLength": 20616
+        },
+        {
+          "id": "02",
+          "title": "Chapter II. The Law of Club and Fang",
+          "textLength": 18339
+        },
+        {
+          "id": "03",
+          "title": "Chapter III. The Dominant Primordial Beast",
+          "textLength": 28378
+        },
+        {
+          "id": "04",
+          "title": "Chapter IV. Who Has Won to Mastership",
+          "textLength": 17541
+        },
+        {
+          "id": "05",
+          "title": "Chapter V. The Toil of Trace and Trail",
+          "textLength": 29630
+        },
+        {
+          "id": "06",
+          "title": "Chapter VI. For the Love of a Man",
+          "textLength": 26425
+        },
+        {
+          "id": "07",
+          "title": "Chapter VII. The Sounding of the Call",
+          "textLength": 34317
+        }
+      ]
+    },
+    {
+      "id": "riders-of-the-purple-sage",
+      "title": "Riders of the Purple Sage",
+      "chapters": [
+        {
+          "id": "01",
+          "title": "Chapter I. Lassiter",
+          "textLength": 18515
+        },
+        {
+          "id": "02",
+          "title": "Chapter II. Cottonwoods",
+          "textLength": 20221
+        },
+        {
+          "id": "03",
+          "title": "Chapter III. Amber Spring",
+          "textLength": 22429
+        },
+        {
+          "id": "04",
+          "title": "Chapter IV. Deception Pass",
+          "textLength": 24851
+        },
+        {
+          "id": "05",
+          "title": "Chapter V. The Masked Rider",
+          "textLength": 23399
+        },
+        {
+          "id": "06",
+          "title": "Chapter VI. The Mill Wheel of Steers",
+          "textLength": 30165
+        },
+        {
+          "id": "07",
+          "title": "Chapter VII. The Daughter of Withersteen",
+          "textLength": 18554
+        },
+        {
+          "id": "08",
+          "title": "Chapter VIII. Surprise Valley",
+          "textLength": 26381
+        },
+        {
+          "id": "09",
+          "title": "Chapter IX. Silver Spruce and Aspens",
+          "textLength": 28043
+        },
+        {
+          "id": "10",
+          "title": "Chapter X. Love",
+          "textLength": 28290
+        },
+        {
+          "id": "11",
+          "title": "Chapter XI. Faith and Unfaith",
+          "textLength": 30965
+        },
+        {
+          "id": "12",
+          "title": "Chapter XII. The Invisible Hand",
+          "textLength": 28417
+        },
+        {
+          "id": "13",
+          "title": "Chapter XIII. Solitude and Storm",
+          "textLength": 24660
+        },
+        {
+          "id": "14",
+          "title": "Chapter XIV. West Wind",
+          "textLength": 17196
+        },
+        {
+          "id": "15",
+          "title": "Chapter XV. Shadows on the Sage Slope",
+          "textLength": 36249
+        },
+        {
+          "id": "16",
+          "title": "Chapter XVI. Gold",
+          "textLength": 19999
+        },
+        {
+          "id": "17",
+          "title": "Chapter XVII. Wrangle's Race Run",
+          "textLength": 32639
+        },
+        {
+          "id": "18",
+          "title": "Chapter XVIII. Oldring's Knell",
+          "textLength": 29578
+        },
+        {
+          "id": "19",
+          "title": "Chapter XIX. Fay",
+          "textLength": 24635
+        },
+        {
+          "id": "20",
+          "title": "Chapter XX. Lassiter's Way",
+          "textLength": 21891
+        },
+        {
+          "id": "21",
+          "title": "Chapter XXI. Black Star and Night",
+          "textLength": 31201
+        },
+        {
+          "id": "22",
+          "title": "Chapter XXII. Riders of the Purple Sage",
+          "textLength": 13041
+        },
+        {
+          "id": "23",
+          "title": "Chapter XXIII. The Fall of Balancing Rock",
+          "textLength": 22952
+        }
+      ]
+    }
+  ]
+}

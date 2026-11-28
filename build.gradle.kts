@@ -4,6 +4,7 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension
 plugins {
     base
     alias(libs.plugins.kotlin.jvm) apply false
+    alias(libs.plugins.kotlin.serialization) apply false
 }
 
 val buildJdk = libs.versions.jdk.get().toInt()
@@ -37,5 +38,5 @@ val audioAcceptance = tasks.register<Exec>("audioAcceptance") {
         layout.buildDirectory.dir("validator").get().asFile)
 }
 tasks.check {
-    dependsOn(":core:check", ":cli:check", validatorTests, audioAcceptance)
+    dependsOn(":core:check", ":cli:check", ":app:check", validatorTests, audioAcceptance)
 }

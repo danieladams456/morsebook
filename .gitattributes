@@ -1,0 +1,2 @@
+# Keep chapter line endings consistent with the UTF-16 lengths in catalog.json.
+app/bundled-content/**/*.txt text eol=lf

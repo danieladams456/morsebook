@@ -5,4 +5,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "morsebook"
-include("core", "cli")
+include("core", "cli", "app")

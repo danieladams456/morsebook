@@ -4,7 +4,7 @@ This draft covers the three-screen, on-device MVP in the [functional requirement
 
 ## Modules and ownership
 
-Today Gradle builds `:core` and `:cli`. Add `:app` as an Android application depending on `:core`. Both the app and CLI consume the same Kotlin synthesizer. Keep Compose, Android audio APIs and persistence in `:app`, with packages for UI, data and playback. Use constructor injection and share repository instances between the activity and service through an application-scoped container. Retain the project's Java 17 target and JDK 25 build decision. [Project decisions](../decisions.md) · [Android architecture recommendations](https://developer.android.com/topic/architecture/recommendations)
+Gradle builds `:core`, `:cli` and the JVM catalog in `:app`. When adding the Android application, switch `:app` to the Android plugin and depend on `:core` so the app and CLI share the same Kotlin synthesizer. Keep Compose, Android audio APIs and persistence in `:app`, with packages for UI, data and playback. Use constructor injection and share repository instances between the activity and service through an application-scoped container. Retain the project's Java 17 target and JDK 25 build decision. [Project decisions](../decisions.md) · [Android architecture recommendations](https://developer.android.com/topic/architecture/recommendations)
 
 | State | Owner | Lifetime |
 | --- | --- | --- |
@@ -20,6 +20,14 @@ Repositories expose observable reads as `Flow` and one-shot writes as suspending
 Keep reading history and settings on the originating device. Configure Android backup rules for the supported OS versions to exclude the Room database and DataStore files from cloud backup and device-to-device transfer. [Android backup rules](https://developer.android.com/identity/data/autobackup)
 
 Validate bundled chapters before shipping. Each must contain at least one playable word. When an updated chapter retains its ID but becomes shorter, resolve an out-of-range bookmark to the last playable word start before displaying progress or resuming.
+
+### Bundled content format
+
+`app/bundled-content/catalog.json` contains a `books` array. Each book has an `id`, `title` and `chapters` array. Each chapter has an `id`, `title` and `textLength`, and its text lives at `<book ID>/<chapter ID>.txt`. Both arrays are in display order. IDs use lowercase letters, digits and hyphens. Keep existing IDs stable because reading state identifies a chapter by its book ID and chapter ID.
+
+Save the chapters as UTF-8 with LF line endings and no BOM. Each text file starts with its original chapter heading, which is part of playback. Set `textLength` to the decoded text's Kotlin `String.length` in UTF-16 code units, including the heading and all whitespace. `BundledCatalogChecks` verifies this value for every bundled chapter. Edits before a saved bookmark can shift its position even if the chapter stays the same length.
+
+`BundledCatalog.loadBooks()` reads the catalog in one asset open. Its `loadChapterText(bookId, chapterId)` method reads one chapter as needed. The JVM build packages `bundled-content` as resources for catalog validation. Use the same directory as an Android asset source directory and pass `assets::open` to the loader when wiring up the app.
 
 ## Screens and data flow
 
@@ -50,7 +58,7 @@ Pause or a chapter switch during startup samples the playback head before flushi
 
 ### From PCM frames to saved words
 
-Target 10–15 seconds of rendered PCM ahead of playback in app memory. Feed AudioTrack through a shorter queue. The app owns the output queue and the played-frame count. If word 12 is audible while word 13 is queued, Pause saves word 12 and Resume begins at its first mark. The Book ViewModel computes the progress ratio on demand for display by dividing the audible or saved word’s source offset by the original chapter string’s length using floating-point division. Both values use UTF-16 code units, so the Book screen can draw the bar without counting words.
+Target 10–15 seconds of rendered PCM ahead of playback in app memory. Feed AudioTrack through a shorter queue. The app owns the output queue and the played-frame count. If word 12 is audible while word 13 is queued, Pause saves word 12 and Resume begins at its first mark. The Book ViewModel computes the progress ratio on demand for display by dividing the audible or saved word’s source offset by the catalog’s chapter text length using floating-point division. Both values use UTF-16 code units, so the Book screen can draw the bar without opening the chapter text file.
 
 Save each speed or tone change immediately. During playback, pause AudioTrack, sample the stopped playback head and persist the usual word-start checkpoint. Flush the track and discard the old rendered PCM. Rebuild the buffer from the saved word with the new settings, then resume automatically at its first mark. A brief gap is acceptable. If the listener pauses or selects another chapter during the rebuild, cancel the pending resume. Changing settings while already paused leaves the chapter paused at its existing position.
 
