@@ -8,6 +8,9 @@
 3. Now Playing: shows the selected chapter title, Play/Pause, Restart chapter, Next chapter, and controls for CW speed and tone frequency. Both settings apply app-wide. Changing either setting during playback pauses audio, saves the start of the word being heard, rebuilds the buffer with the new settings, and automatically replays that word from the beginning. A brief delay is acceptable. Changing settings while paused leaves playback paused. Tapping Play starts or resumes the selected chapter. Playback continues when the user navigates away, switches apps, or locks the device.
 
 ### Playback Model
+
+Scrubbing within a chapter is out of scope for the MVP, including through Android’s system media controls. Revisit the `MorsePcmStream` interface when adding scrubbing.
+
 1. Progress tracks the word the listener is hearing. The Book screen computes the progress fraction for display from that word’s starting offset and the chapter text length. Playback ignores unsupported characters. If paused mid-word, playback resumes from the beginning of that word.
 2. A chapter can be unread, partially read, or read. Starting an unread chapter or replaying a read chapter makes it partially read.
 3. Long-press an unread or partially read chapter and choose “Mark as read” to mark it finished. Long-press a read chapter and choose “Mark as unread” to mark it unread again. Marking the playing chapter as read pauses playback and keeps that chapter selected. Changing the status of any other chapter leaves playback uninterrupted.
