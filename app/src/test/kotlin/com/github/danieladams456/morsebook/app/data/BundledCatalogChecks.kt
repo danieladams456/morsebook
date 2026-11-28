@@ -60,7 +60,7 @@ class BundledCatalogChecks {
     @Test
     fun bundledChaptersMatchTheCatalogAndCanPlay() {
         val catalog = BundledCatalog { path ->
-            checkNotNull(javaClass.classLoader.getResourceAsStream(path)) { "Missing bundled asset $path" }
+            checkNotNull(javaClass.getResourceAsStream("/$path")) { "Missing bundled asset $path" }
         }
         val books = catalog.loadBooks()
         assertEquals(listOf("the-call-of-the-wild", "riders-of-the-purple-sage"), books.map { it.id })
